@@ -83,7 +83,9 @@ export class Game {
   private level = 1;
   private themeIndex = 0;
   private nextLandmarkZ = 0;
-  /** Resolves once initial theme's GLBs are cached. */
+  /** Resolves once the initial theme's GLBs are cached. main.ts awaits
+   *  this before calling start() so the player lands in 3D, not in a
+   *  primitive scene that swaps to 3D over the first few seconds. */
   assetsReady: Promise<void> = Promise.resolve();
 
   constructor(canvas: HTMLCanvasElement, ui: UI) {
@@ -120,6 +122,11 @@ export class Game {
       ? Math.max(0, THEMES.findIndex((t) => t.id === urlTheme))
       : 0;
     const initial = THEMES[initialIdx];
+    // CRITICAL: keep themeIndex in sync so checkThemeSwitch doesn't try
+    // to "switch back" to THEMES[0] thinking we're still there. Without
+    // this, ?theme=italy started visually as Rome but the index thought
+    // it was NYC, causing weird state when crossing 400m segments.
+    this.themeIndex = initialIdx;
     this.scene.background = new THREE.Color(initial.sky);
     this.scene.fog = new THREE.Fog(initial.fog, initial.fogNear, initial.fogFar);
 
@@ -139,14 +146,18 @@ export class Game {
     this.world = new World(this.scene, initial);
     // Preload all road textures in background so theme switches are instant (no lag)
     this.world.preloadAllRoads();
-    // Eagerly fetch initial theme's GLBs so TAP TO RUN can wait for them.
+    this.player = new Player(this.scene);
+    this.chaser = new Chaser(this.scene);
+    // Now that Player exists (and started fetching its Mav GLB), build the
+    // assetsReady promise. main.ts awaits this before calling start(), so
+    // the player lands in a fully 3D scene with the 3D Mav already on
+    // screen — no primitive flash, no "two Mavs overlapping" double-render.
     this.assetsReady = Promise.all([
       preloadThemeBuildings(initial.id),
       preloadThemeObstacles(initial.id),
       preloadLandmark(initial.id, initial.landmark),
+      this.player.mavReady(),
     ]).then(() => undefined);
-    this.player = new Player(this.scene);
-    this.chaser = new Chaser(this.scene);
     this.particles = new Particles(this.scene);
     this.weather = new Weather(this.scene);
     this.speedLines = new SpeedLines(this.scene);
@@ -156,10 +167,13 @@ export class Game {
     this.skyDome = new SkyDome(initial);
     this.skyDome.addTo(this.scene);
 
-    // ONE landmark per country (Oscar: "bina gibi çok koyman saçma olur").
+    // ONE landmark per country (Oscar: "bina gibi çok koyman saçma olur"):
+    // Single hero monument — Statue of Liberty / Christ / Eiffel / etc. —
+    // placed ahead and to the side so the player runs PAST it once.
     this.nextLandmarkZ = -90;
     this.world.spawnLandmark(initial, this.nextLandmarkZ, -1);
-    this.nextLandmarkZ = -10000;
+    this.nextLandmarkZ = -10000; // disable further landmark spawns until next theme
+    // Welcome-gate flag pair so the player can SEE which country they're in.
     this.world.spawnFlagPair(initial, -70);
 
     this.input.on((e) => {
@@ -288,7 +302,7 @@ export class Game {
     this.particles.clear();
     this.speedLines.clear();
     this.shakeT = 0;
-    // ONE landmark for the started country.
+    // ONE landmark for the country we just started (matches init() logic).
     const startThemeObj = THEMES[startTheme];
     this.nextLandmarkZ = -90;
     this.world.spawnLandmark(startThemeObj, this.nextLandmarkZ, -1);
@@ -317,12 +331,18 @@ export class Game {
     this.world.setTheme(theme);
     if (this.horizon) this.horizon.setTheme(theme);
     if (this.skyDome) this.skyDome.setTheme(theme);
-    // Russia=snow, Japan=rain, UK=drizzle, others=clear.
+    // Per-country REAL-world weather cliché:
+    //  Russia (Moscow)  → snow   (sert kış, ikonik)
+    //  Japan  (Tokyo)   → rain   (yağışlı, neon-gece klişesi)
+    //  UK     (London)  → drizzle (klasik İngiliz çisintisi)
+    //  Others           → clear (parlak gündüz)
     const weatherByTheme: Record<string, "snow" | "rain" | "drizzle" | "off"> = {
       russia: "snow",
       japan: "rain",
       uk: "drizzle",
+      // China = Shanghai monsoon-style rain (urban evening downpour)
       china: "rain",
+      // Italy/Australia/Korea = clear days; can adjust later if needed
     };
     this.weather.setMode(weatherByTheme[theme.id] ?? "off");
     if (!instant) this.ui.showCityBanner(theme);
@@ -408,24 +428,21 @@ export class Game {
     if (target !== this.themeIndex) {
       this.themeIndex = target;
       this.applyTheme(THEMES[target]);
-      // ONE landmark + welcome-gate flag pair per country.
+      // ONE landmark for the new country, far ahead, off to one side.
       this.nextLandmarkZ = -130;
       this.world.spawnLandmark(THEMES[target], this.nextLandmarkZ, -1);
       this.nextLandmarkZ = -10000;
+      // Welcome-gate: flag pair at ~70m ahead so the player runs THROUGH
+      // the flags as they enter the new country. (Flags removed from
+      // periodic props — Oscar: "sadece ülkeye girerken olacak.")
       this.world.spawnFlagPair(THEMES[target], -70);
     }
   }
 
   private maybeSpawnLandmark() {
-    // Keep landmarks populated ahead
-    if (this.nextLandmarkZ > -180) {
-      this.world.spawnLandmark(
-        THEMES[this.themeIndex],
-        this.nextLandmarkZ,
-        Math.random() < 0.5 ? -1 : 1
-      );
-      this.nextLandmarkZ -= LANDMARK_SPACING;
-    }
+    // Disabled: one landmark per country only. checkThemeSwitch() handles
+    // the single placement; this method intentionally no-ops now.
+    // (Periodic spawn was making the road feel like a monument parade.)
   }
 
   private loop = (now: number) => {
