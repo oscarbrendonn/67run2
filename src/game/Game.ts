@@ -152,12 +152,24 @@ export class Game {
     // assetsReady promise. main.ts awaits this before calling start(), so
     // the player lands in a fully 3D scene with the 3D Mav already on
     // screen — no primitive flash, no "two Mavs overlapping" double-render.
-    this.assetsReady = Promise.all([
+    const assetsPromise = Promise.all([
       preloadThemeBuildings(initial.id),
       preloadThemeObstacles(initial.id),
       preloadLandmark(initial.id, initial.landmark),
       this.player.mavReady(),
     ]).then(() => undefined);
+    const failsafeTimeout = new Promise<void>((resolve) => {
+      setTimeout(() => resolve(), 20000);
+    });
+    this.assetsReady = Promise.race([assetsPromise, failsafeTimeout]);
+    setTimeout(() => {
+      for (const t of THEMES) {
+        if (t.id === initial.id) continue;
+        preloadThemeBuildings(t.id);
+        preloadThemeObstacles(t.id);
+        preloadLandmark(t.id, t.landmark);
+      }
+    }, 100);
     this.particles = new Particles(this.scene);
     this.weather = new Weather(this.scene);
     this.speedLines = new SpeedLines(this.scene);
