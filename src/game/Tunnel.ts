@@ -211,12 +211,16 @@ function make67TagTexture(asSign = false): THREE.Texture {
   if (asSign) {
     ctx.fillStyle = "#ffd257";
     ctx.strokeStyle = "#2a1500";
-    ctx.lineWidth = 8;
-    ctx.font = "900 140px -apple-system, Inter, Arial";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.strokeText("67 METRO", 256, 100);
-    ctx.fillText("67 METRO", 256, 100);
+    ctx.lineWidth = 5;
+    ctx.font = "900 56px -apple-system, Inter, Arial";
+    ctx.strokeText("TUNNEL LENGTH", 256, 60);
+    ctx.fillText("TUNNEL LENGTH", 256, 60);
+    ctx.lineWidth = 8;
+    ctx.font = "900 110px -apple-system, Inter, Arial";
+    ctx.strokeText("6-7 M", 256, 140);
+    ctx.fillText("6-7 M", 256, 140);
   } else {
     ctx.save();
     ctx.translate(256, 160);

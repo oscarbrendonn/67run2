@@ -145,12 +145,11 @@ export class Game {
     this.skyDome = new SkyDome(initial);
     this.skyDome.addTo(this.scene);
 
-    // Seed initial landmarks
-    this.nextLandmarkZ = -60;
-    for (let i = 0; i < 3; i++) {
-      this.world.spawnLandmark(initial, this.nextLandmarkZ, i % 2 === 0 ? -1 : 1);
-      this.nextLandmarkZ -= LANDMARK_SPACING;
-    }
+    // ONE landmark per country (Oscar: "bina gibi çok koyman saçma olur").
+    this.nextLandmarkZ = -90;
+    this.world.spawnLandmark(initial, this.nextLandmarkZ, -1);
+    this.nextLandmarkZ = -10000;
+    this.world.spawnFlagPair(initial, -70);
 
     this.input.on((e) => {
       if (this.phase !== "playing") return;
@@ -278,14 +277,12 @@ export class Game {
     this.particles.clear();
     this.speedLines.clear();
     this.shakeT = 0;
-    // Seed 3 landmarks ahead at start (use the theme we actually started in,
-    // not always THEMES[0] — that was bugging the HUD to show "NEW YORK"
-    // even when ?theme=russia / ?theme=egypt was in the URL).
+    // ONE landmark for the started country.
     const startThemeObj = THEMES[startTheme];
-    for (let i = 0; i < 3; i++) {
-      this.world.spawnLandmark(startThemeObj, this.nextLandmarkZ, i % 2 === 0 ? -1 : 1);
-      this.nextLandmarkZ -= LANDMARK_SPACING;
-    }
+    this.nextLandmarkZ = -90;
+    this.world.spawnLandmark(startThemeObj, this.nextLandmarkZ, -1);
+    this.nextLandmarkZ = -10000;
+    this.world.spawnFlagPair(startThemeObj, -70);
     this.world.spawnAhead(0);
     this.ui.setScore(0);
     this.ui.setCoins(0);
@@ -309,7 +306,14 @@ export class Game {
     this.world.setTheme(theme);
     if (this.horizon) this.horizon.setTheme(theme);
     if (this.skyDome) this.skyDome.setTheme(theme);
-    this.weather.setActive(theme.id === "russia");
+    // Russia=snow, Japan=rain, UK=drizzle, others=clear.
+    const weatherByTheme: Record<string, "snow" | "rain" | "drizzle" | "off"> = {
+      russia: "snow",
+      japan: "rain",
+      uk: "drizzle",
+      china: "rain",
+    };
+    this.weather.setMode(weatherByTheme[theme.id] ?? "off");
     if (!instant) this.ui.showCityBanner(theme);
     this.ui.setCity(theme);
 
@@ -393,11 +397,11 @@ export class Game {
     if (target !== this.themeIndex) {
       this.themeIndex = target;
       this.applyTheme(THEMES[target]);
-      // Spawn a fresh landmark for the new theme close ahead
-      this.nextLandmarkZ = -90;
+      // ONE landmark + welcome-gate flag pair per country.
+      this.nextLandmarkZ = -130;
       this.world.spawnLandmark(THEMES[target], this.nextLandmarkZ, -1);
-      this.world.spawnLandmark(THEMES[target], this.nextLandmarkZ - 40, 1);
-      this.nextLandmarkZ -= LANDMARK_SPACING;
+      this.nextLandmarkZ = -10000;
+      this.world.spawnFlagPair(THEMES[target], -70);
     }
   }
 
