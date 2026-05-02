@@ -5,7 +5,10 @@ const canvas = document.getElementById("game") as HTMLCanvasElement;
 const ui = new UI();
 const game = new Game(canvas, ui);
 
-ui.onStart(() => game.start());
+ui.onStart(async () => {
+  await game.assetsReady;
+  game.start();
+});
 ui.onRetry(() => game.start());
 
 game.init();
