@@ -149,9 +149,11 @@ export class Game {
     this.player = new Player(this.scene);
     this.chaser = new Chaser(this.scene);
     // Now that Player exists (and started fetching its Mav GLB), build the
-    // assetsReady promise. main.ts awaits this before calling start(), so
-    // the player lands in a fully 3D scene with the 3D Mav already on
-    // screen — no primitive flash, no "two Mavs overlapping" double-render.
+    // assetsReady promise. main.ts awaits this before calling start().
+    // Race against a 20s timeout so a single hung GLB request can't lock
+    // the user on "LOADING..." forever — Oscar hit that bug. After 20s
+    // we start the game regardless; primitive→3D swap then happens
+    // organically as straggler GLBs arrive.
     const assetsPromise = Promise.all([
       preloadThemeBuildings(initial.id),
       preloadThemeObstacles(initial.id),
@@ -162,6 +164,11 @@ export class Game {
       setTimeout(() => resolve(), 20000);
     });
     this.assetsReady = Promise.race([assetsPromise, failsafeTimeout]);
+    // Fire-and-forget: prefetch every OTHER country's GLBs in the
+    // background so 400m theme switches don't show primitives. Player
+    // runs initial theme while these download. Total ~600MB across 12
+    // countries — slow connections finish in 1-2 minutes, fast ones in
+    // seconds. Each request is independent + cached after first hit.
     setTimeout(() => {
       for (const t of THEMES) {
         if (t.id === initial.id) continue;
@@ -272,6 +279,17 @@ export class Game {
     const smaa = new SMAAEffect({ preset: SMAAPreset.MEDIUM });
 
     this.composer.addPass(new EffectPass(this.camera, bloom, hueSat, bc, vignette, smaa));
+  }
+
+  /** Called from main.ts after assetsReady resolves — rebuilds every
+   *  building/prop using the now-warm GLB cache. Eliminates the
+   *  primitive→3D flash Oscar saw when the title screen first appeared.
+   *  forceRebuildScenery() also re-spawns landmark + flag so the entry
+   *  view is fully 3D from the very first frame the player sees. */
+  rebuildSceneFromCache() {
+    this.world.forceRebuildScenery();
+    this.world.spawnLandmark(THEMES[this.themeIndex], -90, -1);
+    this.world.spawnFlagPair(THEMES[this.themeIndex], -70);
   }
 
   start() {
